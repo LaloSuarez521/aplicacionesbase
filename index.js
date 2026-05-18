@@ -1,50 +1,79 @@
 import { Hono } from 'hono'
 import { Database } from 'bun:sqlite'
 
-// Abre la base de datos
+// Abrimos o creamos la base de datos SQLite
 const db = new Database('./base.sqlite3')
-db.run(`CREATE TABLE IF NOT EXISTS todos (
+
+// Creamos la tabla todos si no existe
+db.run(`
+  CREATE TABLE IF NOT EXISTS todos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     todo TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
-)`)
+  )
+`)
 
+// Creamos la aplicacion con Hono
 const app = new Hono()
 
+// Ruta de prueba para verificar que el servidor funciona
 app.get('/', (c) => {
-    return c.json({ status: 'ok' })
+  return c.json({
+    status: 'ok',
+    mensaje: 'Servidor funcionando correctamente'
+  })
 })
 
-app.post('/login', async (c) => {
-    return c.json({ status: 'ok' })
+// Endpoint solicitado en la actividad
+app.post('/agrega_todo', async (c) => {
+  let body
+
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({
+      error: 'Debes enviar datos en formato JSON'
+    }, 400)
+  }
+
+  const { todo } = body
+
+  if (!todo) {
+    return c.json({
+      error: 'El campo todo es obligatorio'
+    }, 400)
+  }
+
+  try {
+    const stmt = db.prepare('INSERT INTO todos (todo) VALUES (?)')
+    const result = stmt.run(todo)
+
+    return c.json({
+      mensaje: 'Todo agregado correctamente',
+      id: Number(result.lastInsertRowid),
+      todo: todo
+    }, 201)
+
+  } catch (error) {
+    return c.json({
+      error: error.message
+    }, 500)
+  }
 })
 
-app.post('/insert', async (c) => {
-    let body
-    try {
-        body = await c.req.json()
-    } catch {
-        return c.json({ error: 'Falta información necesaria' }, 400)
-    }
-
-    const { todo } = body
-
-    if (!todo) {
-        return c.json({ error: 'Falta información necesaria' }, 400)
-    }
-
-    try {
-        const stmt = db.prepare('INSERT INTO todos (todo) VALUES (?)')
-        const result = stmt.run(todo)
-        return c.json({ id: Number(result.lastInsertRowid), message: 'Insert was successful' }, 201)
-    } catch (err) {
-        return c.json({ error: err.message }, 500)
-    }
+// Endpoint extra para revisar los datos guardados
+app.get('/todos', (c) => {
+  const todos = db.query('SELECT * FROM todos').all()
+  return c.json(todos)
 })
 
 export { app, db }
 
 export default {
-    port: process.env.PORT || 3000,
-    fetch: app.fetch,
+  port: process.env.PORT || 3000,
+  fetch: app.fetch,
 }
+
+
+
+
